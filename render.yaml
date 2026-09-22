@@ -1,0 +1,19 @@
+# render.yaml — SkyGuard AI v2 Backend Deployment (Render.com)
+# Deploy the FastAPI backend to Render with zero config.
+# Sign up at https://render.com → New → Web Service → Connect this repo
+
+services:
+  - type: web
+    name: skyguard-ai-v2-backend
+    runtime: python
+    rootDir: sih-ml-project-main
+    buildCommand: pip install -r requirements.txt && python src/data/fetch_historical.py
+    startCommand: uvicorn src.api.app:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false          # Set manually in Render dashboard
+      - key: PYTHON_VERSION
+        value: "3.11.0"
+    healthCheckPath: /health
+    autoDeploy: true
+    plan: free               # Upgrade to starter for always-on (no sleep)

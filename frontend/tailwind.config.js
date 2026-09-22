@@ -5,6 +5,103 @@ export default {
     extend: {
       colors: {
         base: {
+          950: "#f5f6f7",
+          900: "#ffffff",
+          850: "#f9fafb",
+          800: "#f3f4f6",
+          700: "#e5e7eb",
+          600: "#d1d5db",
+          500: "#9ca3af",
+        },
+        ink: {
+          DEFAULT: "#111827",
+          dim: "#4b5563",
+          faint: "#9ca3af",
+        },
+        line: {
+          DEFAULT: "#e5e7eb",
+          soft: "#f3f4f6",
+          strong: "#d1d5db",
+        },
+        atmos: {
+          50: "#fff7ed",
+          100: "#ffedd5",
+          200: "#fed7aa",
+          300: "#fb923c",
+          400: "#f97316",
+          500: "#ea580c",
+          600: "#c2410c",
+          glow: "rgba(249,115,22,0.12)",
+        },
+        meteo: {
+          temp: "#dc2626",
+          pressure: "#2563eb",
+          humidity: "#0891b2",
+          wind: "#16a34a",
+          rain: "#7c3aed",
+          solar: "#d97706",
+          battery: "#16a34a",
+        },
+        signal: {
+          good: "#16a34a",
+          warn: "#d97706",
+          bad: "#dc2626",
+          info: "#2563eb",
+        },
+      },
+      fontFamily: {
+        sans: ["Inter", "system-ui", "sans-serif"],
+        mono: ["'JetBrains Mono'", "ui-monospace", "monospace"],
+      },
+      boxShadow: {
+        panel: "0 1px 3px 0 rgba(0,0,0,0.07), 0 1px 2px -1px rgba(0,0,0,0.05)",
+        card: "0 2px 8px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.04)",
+        glow: "0 0 0 3px rgba(249,115,22,0.15)",
+      },
+      backgroundImage: {
+        grid: "none",
+      },
+      keyframes: {
+        pulseSoft: {
+          "0%, 100%": { opacity: "1" },
+          "50%": { opacity: "0.6" },
+        },
+        rise: {
+          "0%": { opacity: "0", transform: "translateY(8px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+        marquee: {
+          "0%": { transform: "translateX(0)" },
+          "100%": { transform: "translateX(-50%)" },
+        },
+        scan: {
+          "0%": { transform: "translateY(-100%)" },
+          "100%": { transform: "translateY(100%)" },
+        },
+        drift: {
+          "0%": { transform: "translate(0,0)" },
+          "50%": { transform: "translate(4px,-4px)" },
+          "100%": { transform: "translate(0,0)" },
+        },
+      },
+      animation: {
+        pulseSoft: "pulseSoft 2s ease-in-out infinite",
+        rise: "rise 0.4s ease-out both",
+        marquee: "marquee 30s linear infinite",
+        scan: "scan 6s linear infinite",
+        drift: "drift 9s ease-in-out infinite",
+      },
+    },
+  },
+  plugins: [],
+};
+
+export default {
+  content: ["./index.html", "./src/**/*.{js,jsx}"],
+  theme: {
+    extend: {
+      colors: {
+        base: {
           950: "#f1f6fc", // daylight atmospheric sky base
           900: "#ffffff", // clean cloud-white card/panel surface
           850: "#f8fafc", // elevated panel header / subtle contrast

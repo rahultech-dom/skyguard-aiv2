@@ -1,9 +1,10 @@
 /**
- * SkyGuard AI — API Client Service
- * SIH 2026 Problem Statement 26073
+ * SkyGuard AI v2 — API Client Service
  * 
- * Communicates with the FastAPI streaming backend (http://127.0.0.1:8000).
- * Implements seamless, graceful fallback to mock data when backend is offline.
+ * v2 changes:
+ *   - VITE_API_URL env var used for deployed backend URL
+ *   - Added getLiveFeedStatus() → /api/live-feed
+ *   - Added toggleChaos()       → /api/chaos/toggle
  */
 
 import {
@@ -120,5 +121,28 @@ export async function ingestObservation(reading) {
   } catch (err) {
     console.debug("Backend offline, unable to ingest observation:", err.message);
     return { status: "offline_fallback", anomaly: false };
+  }
+}
+
+// ── v2: Live Feed & Chaos ─────────────────────────────────────────────────────
+
+export async function getLiveFeedStatus() {
+  try {
+    return await fetchWithTimeout(`${API_BASE}/api/live-feed`, {}, 3000);
+  } catch {
+    return { source: "offline", enabled: false, last_poll: null, chaos_enabled: false, faults_injected: 0 };
+  }
+}
+
+export async function toggleChaos(enable = null) {
+  try {
+    return await fetchWithTimeout(`${API_BASE}/api/chaos/toggle`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(enable !== null ? { enable } : {}),
+    }, 3000);
+  } catch (err) {
+    console.debug("Chaos toggle failed:", err.message);
+    return { chaos_enabled: false };
   }
 }
