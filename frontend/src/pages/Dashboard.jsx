@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Menu, Zap } from "lucide-react";
+import LiveFeedBadge from "../components/LiveFeedBadge";
 import Sidebar from "../components/Sidebar";
 import KPICard from "../components/KPICard";
 import NetworkMap from "../components/NetworkMap";
@@ -372,6 +373,8 @@ export default function Dashboard() {
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping" />
               <span>INSAT-3DR: <strong>402.75 MHz</strong></span>
             </div>
+
+            <LiveFeedBadge />
 
             <div className="flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-emerald-800 font-mono-num text-[11px] font-bold shadow-xs">
               <span className="relative flex h-1.5 w-1.5">

@@ -1,57 +1,43 @@
+# SkyGuard AI v2 — .gitignore
+
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
-*.so
+*.pyo
 .Python
-env/
-venv/
-.venv/
-ENV/
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
 *.egg-info/
-.installed.cfg
-*.egg
-
-# Environment Variables & Secrets
-.env
-.env.local
-.env.*.local
-*.env
-
-# Node.js & Frontend
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-.pnpm-debug.log*
 dist/
-dist-ssr/
-*.local
+.eggs/
+.env
+.venv/
+venv/
+env/
 
-# IDE & OS
+# Models (large binary — regenerated on deploy via fetch_historical.py + warm_up)
+sih-ml-project-main/ml/models/*.pkl
+sih-ml-project-main/models/*.pkl
+sih-ml-project-main/ml/outputs/
+
+# Data (large — regenerated on deploy)
+# IMPORTANT: DO NOT gitignore weather_data_real.csv if your deploy server can't run fetch
+# Uncomment below only if Render has internet access during build (it does):
+sih-ml-project-main/data/weather_data_real.csv
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+frontend/.env.production
+
+# IDE
 .vscode/
 .idea/
+*.swp
+*.swo
+
+# OS
 .DS_Store
 Thumbs.db
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
 
-# Archives
-*.zip
-*.tar.gz
+# Logs
+*.log
