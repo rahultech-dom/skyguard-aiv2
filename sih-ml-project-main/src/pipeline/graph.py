@@ -14,6 +14,7 @@ from .nodes import (
     correction_estimate_node,
     maintenance_risk_node,
     narration_llm_node,
+    alert_dispatch_node,
     shap_formatting_node  # backward compatibility
 )
 from .tools import get_station_name
@@ -21,16 +22,18 @@ from .tools import get_station_name
 def build_skyguard_graph() -> StateGraph:
     """
     Constructs the LangGraph state graph for SkyGuard AI with parallel fan-out
-    across 4 deterministic/tool nodes merging into the Groq narration node.
+    across 4 deterministic/tool nodes merging into the Groq narration node,
+    followed by the autonomous alert dispatch node.
     """
     workflow = StateGraph(PipelineAgentState)
 
-    # 1. Add all 5 nodes
+    # 1. Add all 6 nodes
     workflow.add_node("score_calibration", score_calibration_node)
     workflow.add_node("z_score_explainability", z_score_explainability_node)
     workflow.add_node("correction_estimate", correction_estimate_node)
     workflow.add_node("maintenance_risk", maintenance_risk_node)
     workflow.add_node("narration", narration_llm_node)
+    workflow.add_node("alert_dispatch", alert_dispatch_node)
 
     # 2. Fan-out: Parallel execution from START to Nodes 1-4
     workflow.add_edge(START, "score_calibration")
@@ -44,8 +47,11 @@ def build_skyguard_graph() -> StateGraph:
     workflow.add_edge("correction_estimate", "narration")
     workflow.add_edge("maintenance_risk", "narration")
 
-    # 4. Exit to END
-    workflow.add_edge("narration", END)
+    # 4. Action: Narration to Node 6 (Alert Dispatch)
+    workflow.add_edge("narration", "alert_dispatch")
+
+    # 5. Exit to END
+    workflow.add_edge("alert_dispatch", END)
 
     return workflow.compile()
 
@@ -65,7 +71,8 @@ def process_flagged_reading(
     reading: Dict[str, Any],
     ml_output: Dict[str, Any],
     history_readings: Optional[List[Dict[str, Any]]] = None,
-    incident_id: Optional[str] = None
+    incident_id: Optional[str] = None,
+    force_alert: bool = False
 ) -> Dict[str, Any]:
     """
     Primary interface for backend / FastAPI ingestion layer.
@@ -82,6 +89,8 @@ def process_flagged_reading(
         Chronological list of prior readings.
     incident_id : str, optional
         Custom incident identifier (e.g. "AN-10231"). Defaults to generated ID.
+    force_alert : bool, optional
+        Force email dispatch bypassing 180s cooldown.
 
     Returns:
     --------
@@ -103,6 +112,7 @@ def process_flagged_reading(
         "station_id": station_id,
         "station_name": station_name,
         "timestamp": timestamp,
+        "force_alert": force_alert,
         "current_reading": reading,
         "history_readings": history_readings or [],
         "ml_output": ml_output,

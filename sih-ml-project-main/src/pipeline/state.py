@@ -39,6 +39,8 @@ class AnomalyFrontendContract(TypedDict):
     maintenanceRisk: MaintenanceRisk
     zScoreContributions: Optional[List[Dict[str, Any]]]
     shapContributions: Optional[List[Dict[str, Any]]]
+    alertDispatched: Optional[bool]
+    alertStatus: Optional[str]
 
 class PipelineAgentState(TypedDict, total=False):
     # ----------------------------------------------------
@@ -48,6 +50,7 @@ class PipelineAgentState(TypedDict, total=False):
     station_id: str
     station_name: str
     timestamp: str
+    force_alert: bool
     current_reading: Dict[str, Any]
     history_readings: List[Dict[str, Any]]
     ml_output: Dict[str, Any]
@@ -93,6 +96,12 @@ class PipelineAgentState(TypedDict, total=False):
     maintenance_reason: str
 
     # ----------------------------------------------------
-    # 7. Final Assembled Frontend Contract
+    # 7. Node 6: Alert Dispatch Outputs
+    # ----------------------------------------------------
+    alert_dispatched: bool
+    alert_status: str
+
+    # ----------------------------------------------------
+    # 8. Final Assembled Frontend Contract
     # ----------------------------------------------------
     final_output: AnomalyFrontendContract

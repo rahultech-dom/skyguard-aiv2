@@ -642,7 +642,7 @@ export default function Dashboard() {
             <div className="mb-3 flex items-center justify-between">
               <div>
                 <h2 className="text-[15px] font-bold text-slate-900">Flagged AWS Sensor Faults & Quality Control Feed</h2>
-                <span className="text-[12px] text-slate-500 font-medium">Rule-based limits + 12D Isolation Forest ML detection</span>
+                <span className="text-[12px] text-slate-500 font-medium">WMO Physical Limits + Online Half-Space Trees ML Detection & Z-Score Attributions</span>
               </div>
               {focusedSection === "anomalies" && (
                 <button

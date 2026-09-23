@@ -634,12 +634,12 @@ export const SHAP_CONTRIBUTIONS = [
 
 export const PIPELINE_STEPS = [
   { id: "ingest", title: "Open-Meteo & INSAT Ingest", detail: "Live 15-minute sensor telemetry streaming from 12 Indian synoptic AWS nodes with automated Chaos Monkey stress testing." },
-  { id: "quality", title: "WMO Physical Limits", detail: "Multi-tier physical checks validating absolute bounds, rate-of-change leaps, and stuck-sensor flatlines per WMO-No. 8 standards." },
+  { id: "quality", title: "WMO QC-1 Limits", detail: "Multi-tier physical checks validating absolute bounds, rate-of-change leaps, and stuck-sensor flatlines per WMO-No. 8 standards." },
   { id: "features", title: "Streaming Features", detail: "12 real-time streaming features: 10-minute deltas, 1-hour rolling standard deviations, and temporal diurnal vectors." },
-  { id: "model", title: "Half-Space Trees (Online ML)", detail: "Adaptive streaming tree ensemble (River) continuously updating on every reading — eliminates static model drift." },
+  { id: "model", title: "Online Half-Space Trees", detail: "Adaptive streaming tree ensemble (River) continuously updating on every reading — eliminates static model drift." },
   { id: "shap", title: "Z-Score Explainability", detail: "Instantaneous microsecond statistical attribution ranking primary anomaly drivers across temperature, pressure, and humidity." },
-  { id: "rootcause", title: "LangGraph Diagnostics", detail: "Agentic GenAI pipeline correlating physical violations and maintenance history into grounded technician actions." },
-  { id: "alert", title: "Field Action Alert", detail: "Delivers IMD synoptic flags, online baseline-corrected values, and priority work orders for AWS field engineers." },
+  { id: "rootcause", title: "LangGraph Multi-Node AI", detail: "Agentic GenAI pipeline correlating physical violations and maintenance history into grounded technician actions." },
+  { id: "alert", title: "Autonomous Email Alert", detail: "Dispatches instant plain-text SMTP alerts with prescriptive field actions to AWS maintenance crews, with 180s anti-spam cooldown." },
 ];
 
 export const PROBLEM_CARDS = [
