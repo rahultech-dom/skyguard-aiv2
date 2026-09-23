@@ -295,13 +295,16 @@ def maintenance_risk_node(state: PipelineAgentState) -> Dict[str, Any]:
     }
 
 
+# In-memory diagnostic cache to prevent duplicate LLM calls on repeated anomaly states
+_NARRATION_CACHE: Dict[str, Dict[str, str]] = {}
+
 # ==============================================================================
-# NODE 5: Grounded Narration (Groq LLM Node with llama-3.3-70b-versatile)
+# NODE 5: Grounded Narration (Groq LLM Node with openai/gpt-oss-120b / qwen)
 # ==============================================================================
 def narration_llm_node(state: PipelineAgentState) -> Dict[str, Any]:
     """
-    Generates explainable, grounded narrative fields using Groq LLM (model: llama-3.3-70b-versatile / llama-3.1-8b-instant).
-    Strictly references computed state numbers and falls back to deterministic templated text if offline.
+    Generates explainable, grounded narrative fields using Groq LLM (model: openai/gpt-oss-120b / qwen-2.5-32b-instruct).
+    Optimized for minimal token usage with prompt compression, semantic signature caching, and strict grounding.
     """
     # Extract merged values
     incident_id = state.get("id", "AN-10231")
@@ -342,84 +345,85 @@ def narration_llm_node(state: PipelineAgentState) -> Dict[str, Any]:
     fallback_action = f"Inspect {parameter.lower()} sensor hardware and verify calibration against station baseline."
     fallback_m_reason = f"Repeated {parameter.lower()} anomalies ({count} incidents) detected in the last {window_hours} hours."
 
-    ai_assessment = fallback_ai_assessment
-    probable_root_cause = fallback_probable_cause
-    recommended_action = fallback_action
-    maintenance_reason = fallback_m_reason
+    # Check Anomaly Signature Cache (0 Token usage for repeated station faults)
+    cache_key = f"{station_id}_{parameter}_{root_cause_category}_{severity}_{round(observed, 0)}_{round(expected, 0)}"
+    if cache_key in _NARRATION_CACHE:
+        cached = _NARRATION_CACHE[cache_key]
+        ai_assessment = cached.get("aiAssessment", fallback_ai_assessment)
+        probable_root_cause = cached.get("probableRootCause", fallback_probable_cause)
+        recommended_action = cached.get("recommendedAction", fallback_action)
+        maintenance_reason = cached.get("maintenanceReason", fallback_m_reason)
+    else:
+        ai_assessment = fallback_ai_assessment
+        probable_root_cause = fallback_probable_cause
+        recommended_action = fallback_action
+        maintenance_reason = fallback_m_reason
 
-    # Attempt Groq LLM Generation
-    groq_api_key = os.getenv("GROQ_API_KEY")
-    if groq_api_key:
-        try:
-            from langchain_groq import ChatGroq
-            from langchain_core.messages import SystemMessage, HumanMessage
+        # Attempt Groq LLM Generation (openai/gpt-oss-120b or qwen-2.5-32b-instruct)
+        groq_api_key = os.getenv("GROQ_API_KEY")
+        if groq_api_key:
+            try:
+                from langchain_groq import ChatGroq
+                from langchain_core.messages import SystemMessage, HumanMessage
 
-            # Primary model: llama-3.3-70b-versatile, fallback: llama-3.1-8b-instant
-            llm = ChatGroq(
-                groq_api_key=groq_api_key,
-                model_name="llama-3.3-70b-versatile",
-                temperature=0.1,
-                max_tokens=300,
-                model_kwargs={"response_format": {"type": "json_object"}}
-            )
+                model_name = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 
-            system_prompt = (
-                "You are SkyGuard AI, an expert meteorologist and weather sensor diagnostics system. "
-                "Your task is to generate concise, highly professional narrative explanations for flagged sensor anomalies. "
-                "STRICT CONSTRAINT: You must ONLY reference the exact numbers and categories provided in the context. "
-                "Never invent or modify numeric values. Output your response as a valid JSON object with keys: "
-                "'aiAssessment', 'probableRootCause', 'recommendedAction', 'maintenanceReason'."
-            )
+                llm = ChatGroq(
+                    groq_api_key=groq_api_key,
+                    model_name=model_name,
+                    temperature=0.1,
+                    max_tokens=220,  # Token optimization: bounded output length
+                    model_kwargs={"response_format": {"type": "json_object"}}
+                )
 
-            user_prompt = f"""
-Context:
-- Station: {station_id} ({station_name})
-- Parameter: {parameter}
-- Observed Value: {observed}{unit}
-- Expected Baseline: {expected}{unit}
-- Suggested Correction: {correction}{unit}
-- Severity: {severity}
-- Confidence: {confidence}%
-- Primary Driver / Top Feature: {top_feature}
-- Root Cause Category: {root_cause_category}
-- 24h Incident Count: {count} in last {window_hours} hours
-- Maintenance Risk: {m_level} (score {m_score}/100)
+                # Compact System Prompt (~35 tokens)
+                system_prompt = (
+                    "You are SkyGuard AI, a weather diagnostics expert. "
+                    "Produce concise explanations strictly using given metrics. "
+                    "Output valid JSON with keys: aiAssessment, probableRootCause, recommendedAction, maintenanceReason."
+                )
 
-Requirements:
-1. aiAssessment: 2-3 sentence narrative explaining the discrepancy, rate of change, and baseline divergence.
-2. probableRootCause: Expand '{root_cause_category}' into a detailed diagnostic phrase.
-3. recommendedAction: 1 clear actionable mitigation step for AWS field technicians.
-4. maintenanceReason: 1 sentence explaining why maintenance risk is {m_level} using the {count} incidents in {window_hours} hours.
+                # Compact User Prompt (~95 tokens)
+                user_prompt = f"""Station: {station_id} ({station_name})
+Metric: {parameter} | Obs: {observed}{unit} | Base: {expected}{unit} | Corr: {correction}{unit}
+Severity: {severity} ({confidence}%) | Driver: {top_feature} | Cause: {root_cause_category}
+Maintenance: {m_level} (Score {m_score}/100, {count} alerts in {window_hours}h)
 
-Respond with valid JSON:
-{{"aiAssessment": "...", "probableRootCause": "...", "recommendedAction": "...", "maintenanceReason": "..."}}
-"""
-            response = llm.invoke([
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=user_prompt)
-            ])
+JSON Output:
+{{"aiAssessment": "2 concise sentences on shift & baseline delta", "probableRootCause": "diagnostic phrase for {root_cause_category}", "recommendedAction": "1 field action", "maintenanceReason": "1 sentence on risk level"}}"""
 
-            content = response.content.strip()
-            # Clean markdown codeblocks if present
-            if "```json" in content:
-                content = content.split("```json")[1].split("```")[0]
-            elif "```" in content:
-                content = content.split("```")[1].split("```")[0]
-            content = content.strip()
+                response = llm.invoke([
+                    SystemMessage(content=system_prompt),
+                    HumanMessage(content=user_prompt)
+                ])
 
-            # Find first { and last } to isolate JSON
-            first_brace = content.find('{')
-            last_brace = content.rfind('}')
-            if first_brace != -1 and last_brace != -1:
-                content = content[first_brace:last_brace+1]
+                content = response.content.strip()
+                if "```json" in content:
+                    content = content.split("```json")[1].split("```")[0]
+                elif "```" in content:
+                    content = content.split("```")[1].split("```")[0]
+                content = content.strip()
 
-            parsed = json.loads(content)
-            ai_assessment = parsed.get("aiAssessment", fallback_ai_assessment)
-            probable_root_cause = parsed.get("probableRootCause", fallback_probable_cause)
-            recommended_action = parsed.get("recommendedAction", fallback_action)
-            maintenance_reason = parsed.get("maintenanceReason", fallback_m_reason)
-        except Exception as e:
-            print(f"Notice: Groq LLM call returned ({e}). Utilizing deterministic narration fallback.")
+                first_brace = content.find('{')
+                last_brace = content.rfind('}')
+                if first_brace != -1 and last_brace != -1:
+                    content = content[first_brace:last_brace+1]
+
+                parsed = json.loads(content)
+                ai_assessment = parsed.get("aiAssessment", fallback_ai_assessment)
+                probable_root_cause = parsed.get("probableRootCause", fallback_probable_cause)
+                recommended_action = parsed.get("recommendedAction", fallback_action)
+                maintenance_reason = parsed.get("maintenanceReason", fallback_m_reason)
+
+                # Store in cache
+                _NARRATION_CACHE[cache_key] = {
+                    "aiAssessment": ai_assessment,
+                    "probableRootCause": probable_root_cause,
+                    "recommendedAction": recommended_action,
+                    "maintenanceReason": maintenance_reason,
+                }
+            except Exception as e:
+                print(f"Notice: Groq LLM call returned ({e}). Utilizing deterministic narration fallback.")
 
     # Assemble Final Frontend Contract
     final_output: AnomalyFrontendContract = {
