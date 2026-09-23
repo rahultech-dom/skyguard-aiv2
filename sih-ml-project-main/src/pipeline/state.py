@@ -5,9 +5,12 @@ SIH 2026 Problem Statement 26073
 
 from typing import TypedDict, Optional, List, Dict, Any
 
-class ShapContribution(TypedDict):
+class ZScoreContribution(TypedDict):
     feature: str
     value: float
+
+# Backward compatibility alias
+ShapContribution = ZScoreContribution
 
 class MaintenanceRawData(TypedDict):
     count: int
@@ -34,6 +37,8 @@ class AnomalyFrontendContract(TypedDict):
     probableRootCause: str
     recommendedAction: str
     maintenanceRisk: MaintenanceRisk
+    zScoreContributions: Optional[List[Dict[str, Any]]]
+    shapContributions: Optional[List[Dict[str, Any]]]
 
 class PipelineAgentState(TypedDict, total=False):
     # ----------------------------------------------------
@@ -46,6 +51,7 @@ class PipelineAgentState(TypedDict, total=False):
     current_reading: Dict[str, Any]
     history_readings: List[Dict[str, Any]]
     ml_output: Dict[str, Any]
+    baseline_stats: Dict[str, Any]
 
     # ----------------------------------------------------
     # 2. Node 1: Score Calibration Outputs
@@ -54,12 +60,13 @@ class PipelineAgentState(TypedDict, total=False):
     severity: str
 
     # ----------------------------------------------------
-    # 3. Node 2: SHAP & Parameter Formatting Outputs
+    # 3. Node 2: Z-Score Explainability & Parameter Formatting Outputs
     # ----------------------------------------------------
     parameter: str
     observed: float
     top_feature: str
     root_cause_category: str
+    z_score_contributions_formatted: List[Dict[str, Any]]
     shap_contributions_formatted: List[Dict[str, Any]]
 
     # ----------------------------------------------------

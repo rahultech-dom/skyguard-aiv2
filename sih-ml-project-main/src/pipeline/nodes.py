@@ -83,33 +83,34 @@ def score_calibration_node(state: PipelineAgentState) -> Dict[str, Any]:
 
 
 # ==============================================================================
-# NODE 2: SHAP & Parameter Formatting (Deterministic, Zero LLM)
+# NODE 2: Z-Score Explainability & Parameter Formatting (Deterministic, Zero LLM)
 # ==============================================================================
-def shap_formatting_node(state: PipelineAgentState) -> Dict[str, Any]:
+def z_score_explainability_node(state: PipelineAgentState) -> Dict[str, Any]:
     """
-    Extracts top feature contribution, maps raw features to human-readable labels,
-    determines the primary anomalous parameter, and classifies the root-cause category.
+    Extracts top feature contribution from online model Z-scores / rate of change,
+    maps raw features to human-readable labels, determines the primary anomalous parameter,
+    and classifies the root-cause category.
     """
     ml_output = state.get("ml_output", {})
     current_reading = state.get("current_reading", {})
-    shap_raw = ml_output.get("shap_contributions", [])
+    z_raw = ml_output.get("z_score_contributions") or ml_output.get("shap_contributions", [])
     rule_violation = ml_output.get("rule_violation")
 
-    # 1. Format SHAP contributions with display names
-    formatted_shap: List[Dict[str, Any]] = []
+    # 1. Format contributions with display names
+    formatted_contributions: List[Dict[str, Any]] = []
     top_feature_key = "temp"
     
-    if shap_raw and isinstance(shap_raw, list):
-        for item in shap_raw:
+    if z_raw and isinstance(z_raw, list):
+        for item in z_raw:
             raw_feat = item.get("feature", "")
             val = item.get("value", 0.0)
             display_name, _ = FEATURE_DISPLAY_MAP.get(raw_feat, (raw_feat, "Temperature"))
-            formatted_shap.append({
+            formatted_contributions.append({
                 "feature": display_name,
                 "value": round(float(val), 2)
             })
-        if shap_raw:
-            top_feature_key = shap_raw[0].get("feature", "temp")
+        if z_raw:
+            top_feature_key = z_raw[0].get("feature", "temp")
 
     # 2. Parameter Detection
     parameter = "Temperature"
@@ -121,19 +122,27 @@ def shap_formatting_node(state: PipelineAgentState) -> Dict[str, Any]:
             parameter = "Humidity"
         elif "temp" in rv_lower:
             parameter = "Temperature"
-    elif shap_raw:
+    elif z_raw:
         # Map from top feature
         _, detected_param = FEATURE_DISPLAY_MAP.get(top_feature_key, ("Temperature", "Temperature"))
         if detected_param in ["Temperature", "Pressure", "Humidity"]:
             parameter = detected_param
         else:
             # If top feature is temporal, pick the highest meteorological feature
-            for item in shap_raw:
+            for item in z_raw:
                 f_key = item.get("feature", "")
                 _, p = FEATURE_DISPLAY_MAP.get(f_key, ("", ""))
                 if p in ["Temperature", "Pressure", "Humidity"]:
                     parameter = p
                     break
+    elif "z_scores" in ml_output and isinstance(ml_output["z_scores"], dict):
+        z_dict = ml_output["z_scores"]
+        scores = {
+            "Temperature": z_dict.get("temp", 0),
+            "Pressure": z_dict.get("pressure", 0),
+            "Humidity": z_dict.get("humidity", 0)
+        }
+        parameter = max(scores, key=scores.get)
 
     # 3. Root Cause Classification
     root_cause_category = "Sensor Anomaly"
@@ -141,13 +150,13 @@ def shap_formatting_node(state: PipelineAgentState) -> Dict[str, Any]:
         rv_lower = rule_violation.lower()
         if "flatline" in rv_lower or "stuck" in rv_lower:
             root_cause_category = "Frozen Sensor"
-        elif "extreme" in rv_lower or "leap" in rv_lower or "spike" in rv_lower:
+        elif "extreme" in rv_lower or "leap" in rv_lower or "spike" in rv_lower or "rate" in rv_lower:
             root_cause_category = "Sensor Spike"
-        elif "invalid" in rv_lower or "range" in rv_lower:
+        elif "invalid" in rv_lower or "range" in rv_lower or "wmo" in rv_lower:
             root_cause_category = "Out of Bounds Range Violation"
     elif top_feature_key.endswith("_diff"):
         root_cause_category = "Sensor Spike"
-    elif top_feature_key.endswith("_roll_std_6"):
+    elif top_feature_key.endswith("_roll_std_6") or top_feature_key.endswith("_roll_std"):
         root_cause_category = "Calibration Drift"
     elif top_feature_key in ["temp", "pressure", "humidity"]:
         root_cause_category = "Possible Sensor Drift"
@@ -163,25 +172,51 @@ def shap_formatting_node(state: PipelineAgentState) -> Dict[str, Any]:
         "observed": round(observed, 1),
         "top_feature": top_display_feature,
         "root_cause_category": root_cause_category,
-        "shap_contributions_formatted": formatted_shap
+        "z_score_contributions_formatted": formatted_contributions,
+        "shap_contributions_formatted": formatted_contributions  # backward compatibility alias
     }
+
+# Backward compatibility alias
+shap_formatting_node = z_score_explainability_node
 
 
 # ==============================================================================
-# NODE 3: Correction Estimate (Deterministic, Zero LLM)
+# NODE 3: Correction Estimate (Deterministic, Zero LLM, Grounded in Online Baseline)
 # ==============================================================================
 def correction_estimate_node(state: PipelineAgentState) -> Dict[str, Any]:
     """
     Computes expected baseline and suggested corrected values via temporal interpolation
-    and rolling history stability scoring.
+    and rolling history stability scoring, strictly grounded in the online model baseline stats.
     """
     current_reading = state.get("current_reading", {})
     history_readings = state.get("history_readings", [])
+    ml_output = state.get("ml_output", {})
+    baseline_stats = state.get("baseline_stats") or ml_output.get("baseline_stats", {})
     
-    # Infer parameter if not already set (runs concurrently)
-    parameter = state.get("parameter", "Temperature")
+    # Infer parameter if not already set (runs concurrently with node 2)
+    parameter = state.get("parameter")
+    if not parameter:
+        rule_violation = ml_output.get("rule_violation")
+        if rule_violation:
+            rv_lower = rule_violation.lower()
+            if "pressure" in rv_lower:
+                parameter = "Pressure"
+            elif "humidity" in rv_lower:
+                parameter = "Humidity"
+            else:
+                parameter = "Temperature"
+        elif "z_scores" in ml_output and isinstance(ml_output["z_scores"], dict):
+            z_dict = ml_output["z_scores"]
+            scores = {
+                "Temperature": z_dict.get("temp", 0),
+                "Pressure": z_dict.get("pressure", 0),
+                "Humidity": z_dict.get("humidity", 0)
+            }
+            parameter = max(scores, key=scores.get)
+        else:
+            parameter = "Temperature"
+
     param_key = PARAM_KEY_MAP.get(parameter, "temp")
-    
     observed = float(current_reading.get(param_key, 0.0))
 
     # Extract historical readings for this parameter
@@ -194,17 +229,22 @@ def correction_estimate_node(state: PipelineAgentState) -> Dict[str, Any]:
     if len(hist_vals) >= 1:
         # Calculate expected baseline from recent chronological window
         expected = round(float(np.mean(hist_vals)), 1)
-        
-        # Smoothed correction estimate
         correction = expected
-        
-        # Calculate stability confidence (lower variance = higher confidence)
         std_val = float(np.std(hist_vals)) if len(hist_vals) > 1 else 0.2
         confidence_calc = 96.0 - (std_val * 6.0)
         correction_confidence = round(min(98.0, max(65.0, confidence_calc)), 1)
-        correction_method = "Temporal interpolation + local station context"
+        correction_method = "Temporal interpolation + local station history"
+    elif baseline_stats and param_key in baseline_stats:
+        # Grounded in online model rolling StationBaseline
+        stat = baseline_stats[param_key]
+        expected = round(float(stat.get("mean", observed)), 1)
+        correction = expected
+        std_val = float(stat.get("std", 1.0))
+        confidence_calc = 95.0 - (std_val * 4.0)
+        correction_confidence = round(min(98.0, max(70.0, confidence_calc)), 1)
+        correction_method = "Online model adaptive rolling baseline"
     else:
-        # Fallback if no history is provided
+        # Fallback if no history or baseline available
         expected = round(observed, 1)
         correction = round(observed, 1)
         correction_confidence = 50.0
@@ -256,11 +296,11 @@ def maintenance_risk_node(state: PipelineAgentState) -> Dict[str, Any]:
 
 
 # ==============================================================================
-# NODE 5: Grounded Narration (Groq LLM Node with openai/gpt-oss-120b)
+# NODE 5: Grounded Narration (Groq LLM Node with llama-3.3-70b-versatile)
 # ==============================================================================
 def narration_llm_node(state: PipelineAgentState) -> Dict[str, Any]:
     """
-    Generates explainable, grounded narrative fields using Groq LLM (model: openai/gpt-oss-120b).
+    Generates explainable, grounded narrative fields using Groq LLM (model: llama-3.3-70b-versatile / llama-3.1-8b-instant).
     Strictly references computed state numbers and falls back to deterministic templated text if offline.
     """
     # Extract merged values
@@ -282,6 +322,7 @@ def narration_llm_node(state: PipelineAgentState) -> Dict[str, Any]:
     
     root_cause_category = state.get("root_cause_category", "Sensor Spike")
     top_feature = state.get("top_feature", "Temperature Delta")
+    z_contribs = state.get("z_score_contributions_formatted") or state.get("shap_contributions_formatted", [])
     
     m_level = state.get("maintenance_level", "MEDIUM-HIGH")
     m_score = state.get("maintenance_score", 78)
@@ -313,11 +354,12 @@ def narration_llm_node(state: PipelineAgentState) -> Dict[str, Any]:
             from langchain_groq import ChatGroq
             from langchain_core.messages import SystemMessage, HumanMessage
 
+            # Primary model: llama-3.3-70b-versatile, fallback: llama-3.1-8b-instant
             llm = ChatGroq(
                 groq_api_key=groq_api_key,
-                model_name="openai/gpt-oss-120b",
+                model_name="llama-3.3-70b-versatile",
                 temperature=0.1,
-                max_tokens=1200,
+                max_tokens=300,
                 model_kwargs={"response_format": {"type": "json_object"}}
             )
 
@@ -334,7 +376,7 @@ Context:
 - Station: {station_id} ({station_name})
 - Parameter: {parameter}
 - Observed Value: {observed}{unit}
-- Expected Value: {expected}{unit}
+- Expected Baseline: {expected}{unit}
 - Suggested Correction: {correction}{unit}
 - Severity: {severity}
 - Confidence: {confidence}%
@@ -399,7 +441,9 @@ Respond with valid JSON:
             "level": m_level,
             "score": m_score,
             "reason": maintenance_reason
-        }
+        },
+        "zScoreContributions": z_contribs,
+        "shapContributions": z_contribs
     }
 
     return {

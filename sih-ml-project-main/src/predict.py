@@ -29,6 +29,7 @@ def predict_anomaly_with_history(current_reading: dict,
         pressure=pressure,
         humidity=humidity,
         timestamp=timestamp,
+        history_readings=history_readings,
     )
 
 

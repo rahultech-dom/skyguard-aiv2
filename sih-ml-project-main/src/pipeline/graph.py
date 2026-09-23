@@ -10,10 +10,11 @@ from langgraph.graph import StateGraph, START, END
 from .state import PipelineAgentState, AnomalyFrontendContract
 from .nodes import (
     score_calibration_node,
-    shap_formatting_node,
+    z_score_explainability_node,
     correction_estimate_node,
     maintenance_risk_node,
-    narration_llm_node
+    narration_llm_node,
+    shap_formatting_node  # backward compatibility
 )
 from .tools import get_station_name
 
@@ -26,20 +27,20 @@ def build_skyguard_graph() -> StateGraph:
 
     # 1. Add all 5 nodes
     workflow.add_node("score_calibration", score_calibration_node)
-    workflow.add_node("shap_formatting", shap_formatting_node)
+    workflow.add_node("z_score_explainability", z_score_explainability_node)
     workflow.add_node("correction_estimate", correction_estimate_node)
     workflow.add_node("maintenance_risk", maintenance_risk_node)
     workflow.add_node("narration", narration_llm_node)
 
     # 2. Fan-out: Parallel execution from START to Nodes 1-4
     workflow.add_edge(START, "score_calibration")
-    workflow.add_edge(START, "shap_formatting")
+    workflow.add_edge(START, "z_score_explainability")
     workflow.add_edge(START, "correction_estimate")
     workflow.add_edge(START, "maintenance_risk")
 
     # 3. Fan-in: Merge all 4 branches into Node 5 (Narration)
     workflow.add_edge("score_calibration", "narration")
-    workflow.add_edge("shap_formatting", "narration")
+    workflow.add_edge("z_score_explainability", "narration")
     workflow.add_edge("correction_estimate", "narration")
     workflow.add_edge("maintenance_risk", "narration")
 
@@ -76,7 +77,7 @@ def process_flagged_reading(
     reading : dict
         Current observation containing temp, pressure, humidity, timestamp, station_id.
     ml_output : dict
-        Output from predict_anomaly_with_history (status, prediction, anomaly_score, rule_violation, shap_contributions).
+        Output from predict_anomaly_with_history (status, prediction, anomaly_score, rule_violation, z_score_contributions).
     history_readings : list of dicts, optional
         Chronological list of prior readings.
     incident_id : str, optional
@@ -92,6 +93,7 @@ def process_flagged_reading(
     station_id = reading.get("station_id", "AWS-DEL-01")
     station_name = get_station_name(station_id)
     timestamp = str(reading.get("timestamp", ""))
+    baseline_stats = ml_output.get("baseline_stats", {})
     
     if not incident_id:
         incident_id = f"AN-{uuid.uuid4().hex[:5].upper()}"
@@ -103,7 +105,8 @@ def process_flagged_reading(
         "timestamp": timestamp,
         "current_reading": reading,
         "history_readings": history_readings or [],
-        "ml_output": ml_output
+        "ml_output": ml_output,
+        "baseline_stats": baseline_stats
     }
 
     # Execute graph synchronously

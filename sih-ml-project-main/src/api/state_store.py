@@ -215,6 +215,13 @@ class StateStore:
                 "score": 78,
                 "reason": "Repeated temperature anomalies detected in the last 24 hours."
             },
+            "zScoreContributions": [
+                {"feature": "Temperature Delta", "value": 0.82},
+                {"feature": "Rolling Temperature Std", "value": 0.61},
+                {"feature": "Temperature", "value": 0.31},
+                {"feature": "Humidity", "value": 0.08},
+                {"feature": "Pressure", "value": 0.03}
+            ],
             "shapContributions": [
                 {"feature": "Temperature Delta", "value": 0.82},
                 {"feature": "Rolling Temperature Std", "value": 0.61},
@@ -296,6 +303,10 @@ class StateStore:
                         "score": 50,
                         "reason": f"Incident recorded for station {s_id}."
                     },
+                    "zScoreContributions": [
+                        {"feature": f"{param} Delta", "value": 0.75},
+                        {"feature": param, "value": 0.50}
+                    ],
                     "shapContributions": [
                         {"feature": f"{param} Delta", "value": 0.75},
                         {"feature": param, "value": 0.50}

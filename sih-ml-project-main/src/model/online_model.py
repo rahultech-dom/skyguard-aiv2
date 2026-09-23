@@ -16,7 +16,12 @@ Per-Station Adaptive Z-Score Baseline:
 
 import os
 import math
-import joblib
+import pickle
+try:
+    import joblib
+    HAS_JOBLIB = True
+except ImportError:
+    HAS_JOBLIB = False
 import numpy as np
 import pandas as pd
 from collections import deque
@@ -95,6 +100,21 @@ class StationBaseline:
     def max_z(self, temp: float, pressure: float, humidity: float) -> float:
         return max(self.z_score(temp, pressure, humidity))
 
+    def get_stats(self) -> Dict[str, Dict[str, float]]:
+        """Return empirical mean and std for each parameter for grounding."""
+        def _stat(hist, default_val=25.0):
+            if not hist:
+                return {"mean": default_val, "std": 1.0}
+            return {
+                "mean": round(float(np.mean(hist)), 2),
+                "std": round(float(np.std(hist)), 2) or 0.1
+            }
+        return {
+            "temp": _stat(self._temp, 25.0),
+            "pressure": _stat(self._pressure, 1012.0),
+            "humidity": _stat(self._humidity, 60.0),
+        }
+
     @property
     def warmed_up(self) -> bool:
         return len(self._temp) >= 10
@@ -151,9 +171,20 @@ class OnlineAnomalyModel:
 
     def _engineer_features(self, station_id: str,
                             temp: float, pressure: float, humidity: float,
-                            timestamp: str) -> dict:
+                            timestamp: str,
+                            history_readings: Optional[List[dict]] = None) -> dict:
         """Build the 12-feature vector for this reading."""
         hist = list(self._get_history(station_id))
+        if not hist and history_readings:
+            hist = [
+                {
+                    "temp": float(r.get("temp", temp)),
+                    "pressure": float(r.get("pressure", pressure)),
+                    "humidity": float(r.get("humidity", humidity)),
+                    "timestamp": r.get("timestamp", timestamp),
+                }
+                for r in history_readings
+            ]
 
         # Rate of change vs previous reading
         if hist:
@@ -216,7 +247,7 @@ class OnlineAnomalyModel:
             ("Humidity",     RATE_LIMITS["humidity_diff"], humidity_diff),
         ]:
             if abs(diff) > limit:
-                return f"Rate-of-Change Violation: {param} Δ={diff:+.1f} (max ±{limit}/10min)"
+                return f"Rate-of-Change Violation: {param} delta={diff:+.1f} (max +/-{limit}/10min)"
 
         # Stuck-sensor flatline
         for param, roll_std, val in [
@@ -233,12 +264,25 @@ class OnlineAnomalyModel:
 
     def predict_and_learn(self, station_id: str,
                           temp: float, pressure: float, humidity: float,
-                          timestamp: str) -> dict:
+                          timestamp: str,
+                          history_readings: Optional[List[dict]] = None) -> dict:
         """
         Score a reading for anomaly AND immediately update the model.
-        Returns rich result dict with scores, engine used, and explanation.
+        Returns rich result dict with scores, engine used, Z-score explainability, and baseline stats.
         """
-        features = self._engineer_features(station_id, temp, pressure, humidity, timestamp)
+        features = self._engineer_features(station_id, temp, pressure, humidity, timestamp, history_readings=history_readings)
+        baseline = self._get_baseline(station_id)
+
+        # Pre-seed baseline if empty and history is provided
+        if not baseline.warmed_up and history_readings:
+            for r in history_readings:
+                t = float(r.get("temp", temp))
+                p = float(r.get("pressure", pressure))
+                h = float(r.get("humidity", humidity))
+                baseline.update(t, p, h)
+
+        z_temp, z_pres, z_hum = baseline.z_score(temp, pressure, humidity)
+        baseline_stats = baseline.get_stats()
 
         # ── Layer 1: Rules ───────────────────────────────────────────────────
         rule_violation = self.check_rules(
@@ -251,19 +295,59 @@ class OnlineAnomalyModel:
             humidity_roll_std=features["humidity_roll_std"] if self._get_history(station_id) else None,
         )
 
+        # Build feature attribution ranking via Z-scores & rate of change
+        z_contributions = [
+            {"feature": "temp_diff", "value": round(min(1.0, abs(features["temp_diff"]) / 5.0), 3)},
+            {"feature": "temp_roll_std_6", "value": round(min(1.0, features["temp_roll_std"] / 2.0), 3)},
+            {"feature": "temp", "value": round(min(1.0, z_temp / 4.0), 3)},
+            {"feature": "pressure_diff", "value": round(min(1.0, abs(features["pressure_diff"]) / 10.0), 3)},
+            {"feature": "pressure", "value": round(min(1.0, z_pres / 4.0), 3)},
+            {"feature": "humidity_diff", "value": round(min(1.0, abs(features["humidity_diff"]) / 30.0), 3)},
+            {"feature": "humidity", "value": round(min(1.0, z_hum / 4.0), 3)},
+        ]
+
+        # Prioritize rule violation feature if present
         if rule_violation:
-            # Still learn even from anomalous readings (model should know these exist)
+            rv_lower = rule_violation.lower()
+            if "temp" in rv_lower:
+                if "rate" in rv_lower:
+                    z_contributions[0]["value"] = 0.98
+                else:
+                    z_contributions[2]["value"] = 0.98
+            elif "pressure" in rv_lower:
+                if "rate" in rv_lower:
+                    z_contributions[3]["value"] = 0.98
+                else:
+                    z_contributions[4]["value"] = 0.98
+            elif "humidity" in rv_lower:
+                if "rate" in rv_lower:
+                    z_contributions[5]["value"] = 0.98
+                else:
+                    z_contributions[6]["value"] = 0.98
+
+        z_contributions.sort(key=lambda x: x["value"], reverse=True)
+
+        if rule_violation:
+            # Still learn even from anomalous readings
             self._update_state(station_id, temp, pressure, humidity, timestamp, features)
             return {
-                "status":         "anomaly",
-                "prediction":     -1,
-                "anomaly_score":  1.0,
-                "confidence":     99.0,
-                "engine":         "rule_engine",
-                "rule_violation": rule_violation,
-                "hst_score":      None,
-                "z_scores":       None,
-                "features":       features,
+                "status":                 "anomaly",
+                "prediction":             -1,
+                "anomaly_score":          1.0,
+                "confidence":             99.0,
+                "engine":                 "rule_engine",
+                "rule_violation":         rule_violation,
+                "hst_score":              None,
+                "z_scores":               {
+                    "temp":     round(z_temp, 2),
+                    "pressure": round(z_pres, 2),
+                    "humidity": round(z_hum, 2),
+                    "max":      round(max(z_temp, z_pres, z_hum), 2),
+                },
+                "z_score_contributions":  z_contributions,
+                "shap_contributions":     z_contributions,  # backward compatibility alias
+                "baseline_stats":         baseline_stats,
+                "features":               features,
             }
 
         # ── Layer 2: HST ─────────────────────────────────────────────────────
@@ -274,8 +358,6 @@ class OnlineAnomalyModel:
             hst.learn_one(features)     # ← real-time model update
 
         # ── Layer 3: Z-Score ─────────────────────────────────────────────────
-        baseline = self._get_baseline(station_id)
-        z_temp, z_pres, z_hum = baseline.z_score(temp, pressure, humidity)
         max_z = max(z_temp, z_pres, z_hum)
         baseline.update(temp, pressure, humidity)
 
@@ -294,20 +376,23 @@ class OnlineAnomalyModel:
         self._update_state(station_id, temp, pressure, humidity, timestamp, features)
 
         return {
-            "status":         "anomaly" if is_anomaly else "normal",
-            "prediction":     -1        if is_anomaly else 1,
-            "anomaly_score":  round(hst_score, 4),
-            "confidence":     confidence,
-            "engine":         engine,
-            "rule_violation": None,
-            "hst_score":      round(hst_score, 4),
-            "z_scores":       {
+            "status":                 "anomaly" if is_anomaly else "normal",
+            "prediction":             -1        if is_anomaly else 1,
+            "anomaly_score":          round(hst_score, 4),
+            "confidence":             confidence,
+            "engine":                 engine,
+            "rule_violation":         None,
+            "hst_score":              round(hst_score, 4),
+            "z_scores":               {
                 "temp":     round(z_temp, 2),
                 "pressure": round(z_pres, 2),
                 "humidity": round(z_hum, 2),
                 "max":      round(max_z,  2),
             },
-            "features":       {k: round(v, 4) for k, v in features.items()},
+            "z_score_contributions":  z_contributions,
+            "shap_contributions":     z_contributions,  # backward compatibility alias
+            "baseline_stats":         baseline_stats,
+            "features":               {k: round(v, 4) for k, v in features.items()},
         }
 
     def _update_state(self, station_id, temp, pressure, humidity, timestamp, features):

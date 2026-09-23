@@ -29,46 +29,60 @@ def run_demo():
     print("=" * 78)
 
     # -------------------------------------------------------------------------
-    # SCENARIO 1: Isolation Forest Multi-Dimensional Anomaly (with SHAP)
+    # SCENARIO 1: Half-Space Trees / Z-Score Anomaly (Z-Score Attribution Pipeline)
     # -------------------------------------------------------------------------
     print("\n" + "#" * 78)
-    print("  SCENARIO 1: ISOLATION FOREST ANOMALY (SHAP ATTRIBUTION PIPELINE)")
+    print("  SCENARIO 1: ONLINE MODEL ANOMALY (Z-SCORE EXPLAINABILITY PIPELINE)")
     print("#" * 78)
 
     pred_csv = os.path.join(BASE_DIR, "outputs", "predictions.csv")
     if not os.path.exists(pred_csv):
         pred_csv = os.path.join(BASE_DIR, "ml", "outputs", "predictions.csv")
 
-    df = pd.read_csv(pred_csv)
-    anom_row = df[df['anomaly'] == -1].sort_values(by='anomaly_score').iloc[0]
-    station_df = df[df['station_id'] == anom_row['station_id']]
-    station_df['timestamp'] = pd.to_datetime(station_df['timestamp'])
-    target_time = pd.to_datetime(anom_row['timestamp'])
-    history_df = station_df[station_df['timestamp'] < target_time].tail(5)
+    if os.path.exists(pred_csv):
+        df = pd.read_csv(pred_csv)
+        anom_row = df[df['anomaly'] == -1].sort_values(by='anomaly_score').iloc[0]
+        station_df = df[df['station_id'] == anom_row['station_id']]
+        station_df['timestamp'] = pd.to_datetime(station_df['timestamp'])
+        target_time = pd.to_datetime(anom_row['timestamp'])
+        history_df = station_df[station_df['timestamp'] < target_time].tail(5)
 
-    history_1 = history_df[['temp', 'pressure', 'humidity', 'timestamp']].to_dict(orient='records')
-    reading_1 = {
-        "temp": float(anom_row['temp']),
-        "pressure": float(anom_row['pressure']),
-        "humidity": float(anom_row['humidity']),
-        "timestamp": str(anom_row['timestamp']),
-        "station_id": str(anom_row['station_id'])
-    }
+        history_1 = history_df[['temp', 'pressure', 'humidity', 'timestamp']].to_dict(orient='records')
+        reading_1 = {
+            "temp": float(anom_row['temp']),
+            "pressure": float(anom_row['pressure']),
+            "humidity": float(anom_row['humidity']),
+            "timestamp": str(anom_row['timestamp']),
+            "station_id": str(anom_row['station_id'])
+        }
+    else:
+        history_1 = [
+            {"temp": 28.0, "pressure": 1008.0, "humidity": 75.0, "timestamp": "2026-08-30 10:00:00", "station_id": "AWS-MUM-04"},
+            {"temp": 28.2, "pressure": 1008.1, "humidity": 75.2, "timestamp": "2026-08-30 10:10:00", "station_id": "AWS-MUM-04"},
+            {"temp": 28.1, "pressure": 1007.9, "humidity": 74.8, "timestamp": "2026-08-30 10:20:00", "station_id": "AWS-MUM-04"},
+        ]
+        reading_1 = {
+            "temp": 38.5,
+            "pressure": 995.0,
+            "humidity": 92.0,
+            "timestamp": "2026-08-30 10:30:00",
+            "station_id": "AWS-MUM-04"
+        }
 
     print(f"Reading: Temp={reading_1['temp']}°C, Pressure={reading_1['pressure']} hPa, Humidity={reading_1['humidity']}%")
     print(f"Station: {reading_1['station_id']}, Timestamp: {reading_1['timestamp']}")
 
-    print("\n[1] Running ML Prediction & SHAP Engine...")
+    print("\n[1] Running ML Prediction & Z-Score Explainability Engine...")
     ml_output_1 = predict_anomaly_with_history(reading_1, history_1)
     print(f"    Status: {ml_output_1.get('status')}")
     print(f"    Engine: {ml_output_1.get('engine')}")
     print(f"    Anomaly Score: {ml_output_1.get('anomaly_score')}")
-    print(f"    SHAP Contributions: {len(ml_output_1.get('shap_contributions', []))} features extracted")
-    if ml_output_1.get('shap_contributions'):
-        top3 = ml_output_1['shap_contributions'][:3]
-        print(f"    Top 3 SHAP Drivers: {top3}")
+    z_contribs = ml_output_1.get('z_score_contributions') or ml_output_1.get('shap_contributions', [])
+    print(f"    Z-Score Contributions: {len(z_contribs)} features extracted")
+    if z_contribs:
+        print(f"    Top 3 Drivers: {z_contribs[:3]}")
 
-    print("\n[2] Executing LangGraph Multi-Node Pipeline...")
+    print("\n[2] Executing LangGraph Multi-Node Pipeline (with z_score_explainability_node)...")
     res_1 = process_flagged_reading(
         reading=reading_1,
         ml_output=ml_output_1,
@@ -84,6 +98,7 @@ def run_demo():
     assert res_1["severity"] in ["critical", "warning", "normal"]
     assert res_1["confidence"] >= 70.0
     assert "maintenanceRisk" in res_1
+    assert "zScoreContributions" in res_1 or "shapContributions" in res_1
 
     # -------------------------------------------------------------------------
     # SCENARIO 2: Rule-Based Interception (Injected Temperature Spike)
