@@ -91,23 +91,41 @@ export async function getAnomalyDetail(anomalyId) {
 }
 
 export async function triggerSimulateAnomaly(stationId = "AWS-DEL-01", anomalyType = "spike") {
+  const isLocal = typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+  const netlifyUrl = "/.netlify/functions/simulate-anomaly";
+  const localUrl = `${API_BASE}/api/simulate-anomaly`;
+  const primaryUrl = isLocal ? localUrl : netlifyUrl;
+
   try {
-    const data = await fetchWithTimeout(`${API_BASE}/api/simulate-anomaly`, {
+    const data = await fetchWithTimeout(primaryUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ station_id: stationId, anomaly_type: anomalyType }),
-    });
+    }, 8000);
     return data;
   } catch (err) {
-    console.debug("Backend offline, simulating locally:", err.message);
-    const station = STATIONS.find((s) => s.id === stationId) || STATIONS[0];
-    const generatedDetail = getStationDetailData(stationId, { ...station, status: "anomaly", temp: 55.0 });
-    return {
-      status: "processed",
-      anomaly: true,
-      detail: generatedDetail,
-    };
+    console.debug("Primary anomaly endpoint failed, attempting fallback:", err.message);
+    if (!isLocal) {
+      try {
+        const localData = await fetchWithTimeout(localUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ station_id: stationId, anomaly_type: anomalyType }),
+        }, 4000);
+        return localData;
+      } catch (err2) {
+        console.debug("Local backend also unreachable:", err2.message);
+      }
+    }
   }
+
+  const station = STATIONS.find((s) => s.id === stationId) || STATIONS[0];
+  const generatedDetail = getStationDetailData(stationId, { ...station, status: "anomaly", temp: 55.0 });
+  return {
+    status: "processed",
+    anomaly: true,
+    detail: generatedDetail,
+  };
 }
 
 export async function ingestObservation(reading) {

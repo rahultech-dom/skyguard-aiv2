@@ -157,7 +157,7 @@ export default function Dashboard() {
         }))
       );
 
-      // If Chaos Monkey is enabled, randomly perturb a station
+      // If Chaos Monkey is enabled, randomly perturb a station & dispatch real alert
       if (chaosEnabled && Math.random() > 0.65) {
         const randIdx = Math.floor(Math.random() * stations.length);
         const target = stations[randIdx];
@@ -183,6 +183,9 @@ export default function Dashboard() {
             rootCause: "Chaos Monkey Injected Spike",
           };
           setAnomalyList((prev) => [newFault, ...prev.slice(0, 14)]);
+
+          // Trigger live email alert via backend/Netlify serverless function
+          triggerSimulateAnomaly(target.id, "spike").catch(() => {});
         }
       }
     }, 4000);
@@ -191,22 +194,29 @@ export default function Dashboard() {
 
   const dismissToast = (id) => setToasts((prev) => prev.filter((t) => t.id !== id));
 
-  const handleToggleChaos = () => {
+  const handleToggleChaos = async () => {
     const next = !chaosEnabled;
     setChaosEnabled(next);
     const id = ++toastIdRef.current;
+
+    if (next) {
+      const targetStation = stations.find((s) => s.id === selectedStationId) || stations[0];
+      // Immediately dispatch real email alert on activation
+      triggerSimulateAnomaly(targetStation.id, "spike").catch(() => {});
+    }
+
     setToasts((prev) => [
       ...prev,
       {
         id,
         station: next ? "Chaos Monkey Activated 🐒" : "Chaos Monkey Deactivated ✅",
-        parameter: next ? "Injecting 40% random physical faults into telemetry stream" : "Sensor stream normalized to baseline",
+        parameter: next ? "Live fault injected & Plain-Text Email Alert dispatched 📧" : "Sensor stream normalized to baseline",
         confidence: next ? 99.5 : 100.0,
       },
     ]);
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 4000);
+    }, 5000);
   };
 
   const handleToggleMode = () => {
