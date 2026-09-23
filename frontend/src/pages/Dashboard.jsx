@@ -441,18 +441,6 @@ export default function Dashboard() {
               faultsInjected={faultsInjected}
             />
 
-            {/* Single Interactive Inject Spike Action Button */}
-            <button
-              onClick={handleSimulateAnomaly}
-              disabled={isSimulating}
-              type="button"
-              className="flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-3.5 py-1 text-[11px] font-bold text-amber-800 transition-all hover:bg-amber-100 hover:border-amber-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-500 disabled:opacity-50 shadow-xs cursor-pointer"
-              title="Inject an immediate test sensor spike onto the active station"
-            >
-              <Zap size={12} className={isSimulating ? "animate-spin text-amber-600" : "text-amber-600 fill-amber-600"} />
-              <span>{isSimulating ? "Analyzing..." : "Inject Anomaly Spike"}</span>
-            </button>
-
             {/* Live Clock */}
             <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-mono-num text-[11px] font-semibold text-slate-600 shadow-xs">
               IST: {formatClock(clock)}
