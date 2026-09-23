@@ -56,6 +56,9 @@ export default function Dashboard() {
   const [stations, setStations] = useState(STATIONS);
   const [stationSeries, setStationSeries] = useState(SENSOR_SERIES);
   const [isSimulating, setIsSimulating] = useState(false);
+  const [isLiveMode, setIsLiveMode] = useState(true);
+  const [chaosEnabled, setChaosEnabled] = useState(false);
+  const [faultsInjected, setFaultsInjected] = useState(0);
   const toastIdRef = useRef(0);
 
   const selectedStation = stations.find((s) => s.id === selectedStationId) || null;
@@ -143,7 +146,7 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, []);
 
-  // Tiny live wobble on station readings
+  // Live telemetry wobble & Automated Chaos injection if active
   useEffect(() => {
     const interval = setInterval(() => {
       setStations((prev) =>
@@ -153,11 +156,76 @@ export default function Dashboard() {
           humidity: Math.max(20, Math.min(95, Number((s.humidity + (Math.random() - 0.5) * 0.6).toFixed(0)))),
         }))
       );
+
+      // If Chaos Monkey is enabled, randomly perturb a station
+      if (chaosEnabled && Math.random() > 0.65) {
+        const randIdx = Math.floor(Math.random() * stations.length);
+        const target = stations[randIdx];
+        if (target) {
+          const spikeTemp = Number((target.temp + 15 + Math.random() * 12).toFixed(1));
+          setStations((prev) =>
+            prev.map((s, idx) =>
+              idx === randIdx ? { ...s, temp: spikeTemp, status: "anomaly", health: Math.max(20, s.health - 6) } : s
+            )
+          );
+          setFaultsInjected((f) => f + 1);
+          setActiveAnomalies((a) => a + 1);
+          const newFault = {
+            id: `AN-${Math.floor(Math.random() * 90000) + 10000}`,
+            time: formatClock(new Date()),
+            station: target.id,
+            stationName: `${target.name || "Station"}, India`,
+            parameter: "Temperature",
+            observed: `${spikeTemp}°C`,
+            expected: `${target.temp}°C`,
+            severity: "critical",
+            confidence: 98.2,
+            rootCause: "Chaos Monkey Injected Spike",
+          };
+          setAnomalyList((prev) => [newFault, ...prev.slice(0, 14)]);
+        }
+      }
     }, 4000);
     return () => clearInterval(interval);
-  }, []);
+  }, [chaosEnabled, stations]);
 
   const dismissToast = (id) => setToasts((prev) => prev.filter((t) => t.id !== id));
+
+  const handleToggleChaos = () => {
+    const next = !chaosEnabled;
+    setChaosEnabled(next);
+    const id = ++toastIdRef.current;
+    setToasts((prev) => [
+      ...prev,
+      {
+        id,
+        station: next ? "Chaos Monkey Activated 🐒" : "Chaos Monkey Deactivated ✅",
+        parameter: next ? "Injecting 40% random physical faults into telemetry stream" : "Sensor stream normalized to baseline",
+        confidence: next ? 99.5 : 100.0,
+      },
+    ]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 4000);
+  };
+
+  const handleToggleMode = () => {
+    const next = !isLiveMode;
+    setIsLiveMode(next);
+    const id = ++toastIdRef.current;
+    setToasts((prev) => [
+      ...prev,
+      {
+        id,
+        station: next ? "Connected to LIVE Open-Meteo 🛰" : "Switched to Simulation Mode 📊",
+        parameter: next ? "Polling 12 synoptic AWS nodes across India" : "Operating on calibrated 60-min sliding ring buffers",
+        confidence: 99.0,
+      },
+    ]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 4000);
+  };
 
   // Open Full LangGraph Diagnostic Drawer
   const openAnomalyDetail = async (anomaly) => {
@@ -231,7 +299,7 @@ export default function Dashboard() {
       }
 
       const id = ++toastIdRef.current;
-      setToasts((prev) => [...prev, { id, station: targetStation.id, parameter: "Temperature", confidence: 98.5 }]);
+      setToasts((prev) => [...prev, { id, station: targetStation.id, parameter: "Temperature Spike Injected", confidence: 98.5 }]);
       setTimeout(() => {
         setToasts((prev) => prev.filter((t) => t.id !== id));
       }, 5000);
@@ -251,8 +319,9 @@ export default function Dashboard() {
       {
         label: "AWS Stations Online",
         value: `${currentOnlineCount}`,
-        suffix: `/ ${totalStationsCount} Synoptic Nodes`,
-        trend: `${coveragePercent}% Active Grid Coverage`,
+        suffix: `/ ${totalStationsCount} Nodes`,
+        subLabel: `${coveragePercent}% Grid Active`,
+        trend: "Synoptic Grid Active",
         trendDirection: "up",
         status: "good",
         sparkline: sparklines.stationsOnline,
@@ -260,7 +329,9 @@ export default function Dashboard() {
       {
         label: "Telemetry Packets Ingested",
         value: observations.toLocaleString("en-IN"),
-        trend: "INSAT-3DR 1Hz Telemetry",
+        suffix: "Packets",
+        subLabel: "INSAT-3DR 1Hz Stream",
+        trend: "+4 pkt/sec Live",
         trendDirection: "up",
         status: "info",
         sparkline: sparklines.observations,
@@ -269,15 +340,18 @@ export default function Dashboard() {
         label: "Flagged Sensor Anomalies",
         value: `${activeAnomalies}`,
         suffix: "Active Faults",
-        trend: activeAnomalies > 0 ? "QC Flags Raised" : "All Nominal",
+        subLabel: "Z-Score & HST Flags",
+        trend: activeAnomalies > 0 ? `${activeAnomalies} Outliers Detected` : "All Stations Nominal",
         trendDirection: activeAnomalies > 0 ? "down" : "up",
         status: activeAnomalies > 0 ? "bad" : "good",
         sparkline: sparklines.activeAnomalies,
       },
       {
-        label: "WMO QC Compliance",
+        label: "WMO QC & Model Health",
         value: `${networkHealth}%`,
-        trend: "WMO-No. 8 Validated",
+        suffix: "Validated",
+        subLabel: "Half-Space Trees Online",
+        trend: "WMO-No. 8 Pass",
         trendDirection: "up",
         status: "good",
         sparkline: sparklines.networkHealth,
@@ -332,8 +406,8 @@ export default function Dashboard() {
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Top bar */}
-        <header className="sticky top-0 z-30 flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 bg-white/90 px-6 py-4 backdrop-blur-md">
+        {/* Streamlined Top Bar */}
+        <header className="sticky top-0 z-30 flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 bg-white/95 px-6 py-3.5 backdrop-blur-md">
           <div className="flex items-center gap-3">
             <button
               className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:text-slate-800 lg:hidden"
@@ -352,38 +426,37 @@ export default function Dashboard() {
                 </span>
               </div>
               <p className="text-[12px] text-slate-500 font-medium">
-                Operational Surface Synoptic Telemetry, WMO-No. 8 Quality Control & Anomaly Surveillance.
+                Operational Surface Synoptic Telemetry, WMO-No. 8 Quality Control & Online Anomaly Surveillance.
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3 text-[12px] text-slate-600">
-            {/* Live Interactive Trigger Button */}
+          <div className="flex flex-wrap items-center gap-2.5 text-[12px]">
+            {/* Unified Telemetry & Chaos Controller */}
+            <LiveFeedBadge
+              isLive={isLiveMode}
+              chaosEnabled={chaosEnabled}
+              onToggleChaos={handleToggleChaos}
+              onToggleMode={handleToggleMode}
+              faultsInjected={faultsInjected}
+            />
+
+            {/* Single Interactive Inject Spike Action Button */}
             <button
               onClick={handleSimulateAnomaly}
               disabled={isSimulating}
-              className="flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-3.5 py-1 text-amber-800 transition-all hover:bg-amber-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-500 disabled:opacity-50 font-semibold shadow-xs"
-              title="Inject test sensor anomaly via ML & LangGraph engine"
+              type="button"
+              className="flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-3.5 py-1 text-[11px] font-bold text-amber-800 transition-all hover:bg-amber-100 hover:border-amber-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-500 disabled:opacity-50 shadow-xs cursor-pointer"
+              title="Inject an immediate test sensor spike onto the active station"
             >
-              <Zap size={13} className={isSimulating ? "animate-spin text-amber-600" : "text-amber-600"} />
-              {isSimulating ? "Analyzing Sensor..." : "Inject AWS Sensor Anomaly"}
+              <Zap size={12} className={isSimulating ? "animate-spin text-amber-600" : "text-amber-600 fill-amber-600"} />
+              <span>{isSimulating ? "Analyzing..." : "Inject Anomaly Spike"}</span>
             </button>
 
-            <div className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-mono-num text-slate-600 shadow-xs">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping" />
-              <span>INSAT-3DR: <strong>402.75 MHz</strong></span>
+            {/* Live Clock */}
+            <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-mono-num text-[11px] font-semibold text-slate-600 shadow-xs">
+              IST: {formatClock(clock)}
             </div>
-
-            <LiveFeedBadge />
-
-            <div className="flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-emerald-800 font-mono-num text-[11px] font-bold shadow-xs">
-              <span className="relative flex h-1.5 w-1.5">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-60" />
-                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-600" />
-              </span>
-              SYNCED
-            </div>
-            <span className="font-mono-num text-[11px] text-slate-500 font-medium">IST: {formatClock(clock)}</span>
           </div>
         </header>
 

@@ -633,13 +633,13 @@ export const SHAP_CONTRIBUTIONS = [
 ];
 
 export const PIPELINE_STEPS = [
-  { id: "ingest", title: "INSAT / AWS Ingest", detail: "Raw multi-parameter sensor telemetry streams via INSAT-3DR DCP burst (402.75 MHz) and 4G GPRS from 50 observation stations." },
-  { id: "quality", title: "WMO QC-1 Limits", detail: "Automated range checks validating physical limits per WMO-No. 8 standards (Temp -15°C to 55°C, Pressure 850-1080 hPa, RH 0-100%)." },
-  { id: "features", title: "Synoptic Features", detail: "12 derived features: temporal rolling gradients, psychrometric dew point departure, and barometric tendency." },
-  { id: "model", title: "12D Isolation Forest", detail: "High-dimensional tree ensemble scoring observations against learned multivariate microclimate baselines." },
-  { id: "shap", title: "SHAP Attribution", detail: "Rigorous game-theoretic attribution quantifying the exact mathematical contribution of each sensor to the anomaly." },
-  { id: "rootcause", title: "Sensor Diagnostics", detail: "LangGraph agent correlates cross-sensor patterns to pinpoint hardware failures: RTD lead spike, funnel clog, or louver heating." },
-  { id: "alert", title: "Field Action Alert", detail: "Delivers IMD synoptic flag, baseline interpolated value, and field technician maintenance priority." },
+  { id: "ingest", title: "Open-Meteo & INSAT Ingest", detail: "Live 15-minute sensor telemetry streaming from 12 Indian synoptic AWS nodes with automated Chaos Monkey stress testing." },
+  { id: "quality", title: "WMO Physical Limits", detail: "Multi-tier physical checks validating absolute bounds, rate-of-change leaps, and stuck-sensor flatlines per WMO-No. 8 standards." },
+  { id: "features", title: "Streaming Features", detail: "12 real-time streaming features: 10-minute deltas, 1-hour rolling standard deviations, and temporal diurnal vectors." },
+  { id: "model", title: "Half-Space Trees (Online ML)", detail: "Adaptive streaming tree ensemble (River) continuously updating on every reading — eliminates static model drift." },
+  { id: "shap", title: "Z-Score Explainability", detail: "Instantaneous microsecond statistical attribution ranking primary anomaly drivers across temperature, pressure, and humidity." },
+  { id: "rootcause", title: "LangGraph Diagnostics", detail: "Agentic GenAI pipeline correlating physical violations and maintenance history into grounded technician actions." },
+  { id: "alert", title: "Field Action Alert", detail: "Delivers IMD synoptic flags, online baseline-corrected values, and priority work orders for AWS field engineers." },
 ];
 
 export const PROBLEM_CARDS = [

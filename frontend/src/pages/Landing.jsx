@@ -175,20 +175,20 @@ export default function Landing() {
 
           <div className="mt-12 grid gap-5 lg:grid-cols-3">
             <IntelligenceCard
-              title="12D Hybrid Detection"
-              desc="Cross-references WMO-No. 8 physical limits with an Isolation Forest model trained on multi-parameter atmospheric microclimates."
+              title="Online Machine Learning (Half-Space Trees)"
+              desc="Continuously updates with every live 15-min reading from Open-Meteo, adapting to seasonal microclimate drift across 12 Indian cities without static frozen models."
             >
               <MiniDetectViz />
             </IntelligenceCard>
             <IntelligenceCard
-              title="SHAP Sensor Attribution"
-              desc="Quantifies the mathematical impact of each meteorological sensor (Temp, Pressure, RH, Wind) on the anomaly flag."
+              title="Z-Score Feature Explainability"
+              desc="Quantifies real-time statistical deviations across temperature deltas, rolling variance, and barometric tendencies at microsecond latency."
             >
               <MiniExplainViz />
             </IntelligenceCard>
             <IntelligenceCard
-              title="Hardware Root-Cause Diagnosis"
-              desc="Pinpoints specific failure modes: RTD lead wire detachment, radiation shield heating, or TBRG funnel clogging."
+              title="LangGraph Agentic Diagnostics & Chaos"
+              desc="Grounded multi-node GenAI diagnosis powered by Groq LLMs (openai/gpt-oss-120b & Qwen), stress-tested with automated Chaos Monkey fault injection."
             >
               <MiniRespondViz />
             </IntelligenceCard>

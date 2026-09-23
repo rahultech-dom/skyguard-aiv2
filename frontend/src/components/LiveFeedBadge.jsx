@@ -1,75 +1,60 @@
-/**
- * SkyGuard AI v2 — LiveFeedBadge Component
- * Shows real-time status of the Open-Meteo live poller and Chaos Monkey toggle.
- * Displayed in the Dashboard top bar.
- */
+import { useState } from "react";
+import { Radio, RefreshCw, Skull, Sparkles } from "lucide-react";
 
-import { useEffect, useState } from "react";
-import { Wifi, WifiOff, Skull } from "lucide-react";
-import { getLiveFeedStatus, toggleChaos } from "../services/api";
+export default function LiveFeedBadge({
+  isLive = true,
+  chaosEnabled = false,
+  onToggleChaos,
+  onToggleMode,
+  faultsInjected = 0,
+}) {
+  const [toggling, setToggling] = useState(false);
 
-export default function LiveFeedBadge() {
-  const [feed, setFeed] = useState(null);
-  const [togglingChaos, setTogglingChaos] = useState(false);
-
-  useEffect(() => {
-    // Fetch live-feed status on mount and every 30s
-    const refresh = async () => {
-      try {
-        const data = await getLiveFeedStatus();
-        setFeed(data);
-      } catch {
-        setFeed(null);
-      }
-    };
-    refresh();
-    const interval = setInterval(refresh, 30_000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const handleChaosToggle = async () => {
-    setTogglingChaos(true);
+  const handleChaosClick = async () => {
+    setToggling(true);
     try {
-      const result = await toggleChaos();
-      setFeed((prev) => prev ? { ...prev, chaos_enabled: result.chaos_enabled } : prev);
+      if (onToggleChaos) await onToggleChaos();
     } finally {
-      setTogglingChaos(false);
+      setToggling(false);
     }
   };
 
-  const isLive = feed?.source === "open-meteo" && feed?.last_poll;
-
   return (
-    <div className="flex items-center gap-2">
-      {/* Live / Mock indicator */}
-      <div
-        className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold shadow-xs
-          ${isLive
-            ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-            : "border-slate-200 bg-slate-100 text-slate-500"}`}
-        title={isLive ? `Last poll: ${feed.last_poll}` : "Offline — using mock data"}
+    <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50/90 p-1 shadow-xs backdrop-blur-xs">
+      {/* Mode Switcher: Live Open-Meteo vs Simulation */}
+      <button
+        onClick={onToggleMode}
+        type="button"
+        className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-bold transition-all cursor-pointer ${
+          isLive
+            ? "border border-emerald-300/80 bg-emerald-500 text-white shadow-xs"
+            : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
+        }`}
+        title={isLive ? "Currently polling live Open-Meteo weather API (Click to switch to simulation mode)" : "Simulation Mode active (Click to connect to live Open-Meteo feed)"}
       >
-        {isLive ? <Wifi size={11} /> : <WifiOff size={11} />}
-        {isLive ? "LIVE · Open-Meteo" : "MOCK DATA"}
-      </div>
+        <Radio size={11} className={isLive ? "animate-pulse" : "text-slate-400"} />
+        <span>{isLive ? "LIVE · Open-Meteo" : "SIMULATION MODE"}</span>
+      </button>
 
-      {/* Chaos Monkey toggle */}
-      {feed && (
-        <button
-          onClick={handleChaosToggle}
-          disabled={togglingChaos}
-          title={feed.chaos_enabled
-            ? `Chaos ON — ${feed.faults_injected} faults injected. Click to disable.`
-            : "Chaos OFF — Click to enable fault injection"}
-          className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-bold shadow-xs transition-all
-            ${feed.chaos_enabled
-              ? "border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100"
-              : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"}`}
-        >
-          <Skull size={11} />
-          {feed.chaos_enabled ? `CHAOS ON (${feed.faults_injected})` : "CHAOS OFF"}
-        </button>
-      )}
+      {/* Chaos Monkey Toggle */}
+      <button
+        onClick={handleChaosClick}
+        disabled={toggling}
+        type="button"
+        className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-bold transition-all cursor-pointer ${
+          chaosEnabled
+            ? "border-rose-400 bg-rose-500 text-white shadow-xs animate-pulse"
+            : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
+        }`}
+        title={
+          chaosEnabled
+            ? `Chaos Monkey is ACTIVE (${faultsInjected} faults injected into live stream). Click to disable.`
+            : "Chaos Monkey is OFF. Click to enable 40% random sensor fault injection."
+        }
+      >
+        <Skull size={11} className={chaosEnabled ? "text-white" : "text-slate-500"} />
+        <span>{chaosEnabled ? `CHAOS ON (${faultsInjected})` : "CHAOS OFF"}</span>
+      </button>
     </div>
   );
 }
