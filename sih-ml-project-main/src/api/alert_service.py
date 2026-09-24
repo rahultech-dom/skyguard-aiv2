@@ -169,6 +169,7 @@ def send_email_alert(incident: Dict[str, Any], force: bool = False) -> Dict[str,
         with smtplib.SMTP(smtp_server, smtp_port, timeout=10) as server:
             server.ehlo()
             server.starttls()
+            server.ehlo()
             server.login(smtp_user, smtp_password)
             server.sendmail(smtp_user, recipients, msg.as_string())
 
