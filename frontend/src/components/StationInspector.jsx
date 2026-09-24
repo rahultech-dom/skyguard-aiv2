@@ -132,7 +132,7 @@ export default function StationInspector({ station, onViewDetails }) {
         onClick={onViewDetails}
         className="mt-3 w-full rounded-lg border border-sky-300 bg-sky-50 py-2 text-[12px] font-semibold text-sky-700 transition-colors hover:bg-sky-100 hover:border-sky-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500"
       >
-        View Full WMO Diagnostic & SHAP Analysis
+        View Full WMO Diagnostic & Z-Score Analysis
       </button>
     </div>
   );

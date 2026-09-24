@@ -484,7 +484,7 @@ export default function Dashboard() {
                     ? "Live Sensor Telemetry"
                     : focusedSection === "anomalies"
                     ? "Flagged Sensor Faults"
-                    : "WMO & SHAP Diagnostics"}
+                    : "WMO & Z-Score Diagnostics"}
                 </strong>
               </span>
               <button
@@ -674,7 +674,7 @@ export default function Dashboard() {
           >
             <div className="mb-3 flex items-center justify-between">
               <div>
-                <h2 className="text-[15px] font-bold text-slate-900">WMO Sensor Physics, SHAP Explainability & Maintenance Risk</h2>
+                <h2 className="text-[15px] font-bold text-slate-900">WMO Sensor Physics, Z-Score Explainability & Maintenance Risk</h2>
                 <span className="text-[12px] text-slate-500 font-medium">Atmospheric thermodynamic consistency check & field maintenance scoring</span>
               </div>
               {focusedSection === "analytics" && (

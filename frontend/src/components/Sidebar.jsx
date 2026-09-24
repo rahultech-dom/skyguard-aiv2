@@ -14,7 +14,7 @@ const NAV = [
   { id: "stations", label: "AWS Station Grid", icon: MapPin },
   { id: "monitoring", label: "Sensor Telemetry", icon: Radio },
   { id: "anomalies", label: "QC Anomaly Alerts", icon: AlertTriangle },
-  { id: "analytics", label: "WMO & SHAP Diagnostics", icon: BarChart3 },
+  { id: "analytics", label: "WMO & Z-Score Diagnostics", icon: BarChart3 },
 ];
 
 export default function Sidebar({ active, onSelect, mobileOpen, onCloseMobile }) {

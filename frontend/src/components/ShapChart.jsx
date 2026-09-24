@@ -3,9 +3,9 @@ export default function ShapChart({ contributions }) {
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h4 className="text-[14px] font-bold text-slate-900">Why was this flagged?</h4>
+      <h4 className="text-[14px] font-bold text-slate-900">Why was this flagged? (Z-Score Attribution)</h4>
       <p className="mt-1 text-[12px] text-slate-500 font-medium">
-        Feature contribution to the anomaly score, largest impact first.
+        Z-Score statistical contribution to the anomaly score, largest impact first.
       </p>
 
       <div className="mt-6 space-y-4">
