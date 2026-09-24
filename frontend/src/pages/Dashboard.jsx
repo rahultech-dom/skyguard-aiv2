@@ -31,6 +31,7 @@ import {
   getAnomalies,
   getAnomalyDetail,
   triggerSimulateAnomaly,
+  toggleChaos,
 } from "../services/api";
 
 function formatClock(d) {
@@ -183,9 +184,6 @@ export default function Dashboard() {
             rootCause: "Chaos Monkey Injected Spike",
           };
           setAnomalyList((prev) => [newFault, ...prev.slice(0, 14)]);
-
-          // Trigger live email alert via backend/Netlify serverless function
-          triggerSimulateAnomaly(target.id, "spike").catch(() => {});
         }
       }
     }, 4000);
@@ -199,18 +197,15 @@ export default function Dashboard() {
     setChaosEnabled(next);
     const id = ++toastIdRef.current;
 
-    if (next) {
-      const targetStation = stations.find((s) => s.id === selectedStationId) || stations[0];
-      // Immediately dispatch real email alert on activation
-      triggerSimulateAnomaly(targetStation.id, "spike").catch(() => {});
-    }
+    // Synchronize chaos state with backend API
+    toggleChaos(next).catch(() => {});
 
     setToasts((prev) => [
       ...prev,
       {
         id,
         station: next ? "Chaos Monkey Activated 🐒" : "Chaos Monkey Deactivated ✅",
-        parameter: next ? "Live fault injected & Plain-Text Email Alert dispatched 📧" : "Sensor stream normalized to baseline",
+        parameter: next ? "Injecting 40% random physical faults into telemetry stream" : "Sensor stream normalized to baseline",
         confidence: next ? 99.5 : 100.0,
       },
     ]);

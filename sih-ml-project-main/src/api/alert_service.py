@@ -29,19 +29,28 @@ _COOLDOWN_LOCK = threading.Lock()
 DEFAULT_COOLDOWN_SECONDS = int(os.getenv("ALERT_COOLDOWN_SECONDS", "180"))
 
 
+def reset_cooldowns() -> None:
+    """
+    Clears the in-memory anti-spam cooldown cache.
+    Useful for testing and administrative resets.
+    """
+    with _COOLDOWN_LOCK:
+        _STATION_COOLDOWNS.clear()
+
+
 def generate_alert_text(incident: Dict[str, Any]) -> str:
     """
     Generates a clean, structured Plain Text meteorological report for the incident.
     """
-    station_id = incident.get("station", "AWS-UNKNOWN")
-    station_name = incident.get("stationName", "Weather Station")
+    station_id = incident.get("station") or incident.get("station_id") or "AWS-UNKNOWN"
+    station_name = incident.get("stationName") or incident.get("station_name") or "Weather Station"
     severity = str(incident.get("severity", "critical")).upper()
     confidence = incident.get("confidence", 95.0)
     parameter = incident.get("parameter", "Temperature")
     observed = incident.get("observed", "N/A")
     expected = incident.get("expected", "N/A")
     correction = incident.get("correction", "N/A")
-    root_cause = incident.get("probableRootCause", "Sensor Discrepancy")
+    root_cause = incident.get("probableRootCause") or incident.get("rootCause") or "Sensor Discrepancy"
     ai_assessment = incident.get("aiAssessment", "Anomalous reading detected outside expected baseline.")
     recommended_action = incident.get("recommendedAction", "Inspect sensor transducer and calibration.")
     timestamp = datetime.now().strftime("%d %b %Y, %H:%M:%S IST")
@@ -148,16 +157,20 @@ def send_email_alert(incident: Dict[str, Any], force: bool = False) -> Dict[str,
 
     # Live SMTP Dispatch in Plain Text
     try:
+        recipients = [r.strip() for r in recipient_email.split(",") if r.strip()]
+        if not recipients:
+            recipients = [recipient_email]
+
         msg = MIMEText(text_body, "plain", "utf-8")
         msg["Subject"] = subject
         msg["From"] = f"SkyGuard AI Alerts <{smtp_user}>"
-        msg["To"] = recipient_email
+        msg["To"] = ", ".join(recipients)
 
         with smtplib.SMTP(smtp_server, smtp_port, timeout=10) as server:
             server.ehlo()
             server.starttls()
             server.login(smtp_user, smtp_password)
-            server.sendmail(smtp_user, [recipient_email], msg.as_string())
+            server.sendmail(smtp_user, recipients, msg.as_string())
 
         print(f"[SkyGuard Alert] Live plain text email alert successfully delivered to {recipient_email} for {station_id}")
         return {

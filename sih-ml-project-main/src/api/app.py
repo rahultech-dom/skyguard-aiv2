@@ -178,6 +178,57 @@ def chaos_toggle(enable: Optional[bool] = Body(default=None, embed=True)):
         "message": f"Chaos Monkey {'ENABLED 🐒' if POLLER_STATE.chaos_enabled else 'DISABLED ✅'}",
     }
 
+# ── Alert Dispatch Endpoints ──────────────────────────────────────────────────
+@app.get("/api/alerts/status")
+def get_alert_status():
+    """
+    Returns the current alert dispatcher configuration (recipient, SMTP configured, mode).
+    """
+    smtp_user = os.getenv("SMTP_USER", "").strip()
+    recipient = os.getenv("ALERT_RECIPIENT_EMAIL", "").strip()
+    return {
+        "configured": bool(smtp_user and recipient),
+        "smtp_server": os.getenv("SMTP_SERVER", "smtp.gmail.com"),
+        "smtp_port": int(os.getenv("SMTP_PORT", "587")),
+        "sender_email": smtp_user if smtp_user else "Not set (simulation mode active)",
+        "recipient_email": recipient if recipient else "Not set (simulation mode active)",
+        "mode": "live_smtp" if (smtp_user and recipient) else "simulation",
+        "cooldown_seconds": int(os.getenv("ALERT_COOLDOWN_SECONDS", "180"))
+    }
+
+@app.post("/api/alerts/test")
+def test_alert_dispatch(payload: Optional[dict] = Body(default=None)):
+    """
+    Manual test endpoint to verify email dispatching for a sample anomaly incident.
+    """
+    try:
+        from src.api.alert_service import send_email_alert
+    except ImportError:
+        from api.alert_service import send_email_alert
+
+    station_id = payload.get("station_id", "AWS-DEL-01") if payload else "AWS-DEL-01"
+    station_name = payload.get("stationName", "Delhi") if payload else "Delhi"
+    parameter = payload.get("parameter", "Temperature") if payload else "Temperature"
+    severity = payload.get("severity", "critical") if payload else "critical"
+    observed = payload.get("observed", 55.0) if payload else 55.0
+
+    sample_incident = {
+        "id": "AN-TEST-99",
+        "station": station_id,
+        "stationName": station_name,
+        "parameter": parameter,
+        "severity": severity,
+        "confidence": 98.5,
+        "observed": observed,
+        "expected": 24.6,
+        "correction": 24.6,
+        "probableRootCause": "Sensor Spike / Hardware Transducer Malfunction",
+        "aiAssessment": f"Test alert: {parameter.lower()} sensor jumped abruptly to {observed} exceeding physical baseline limits.",
+        "recommendedAction": f"Inspect {parameter.lower()} sensor cabling and verify calibration against standard reference."
+    }
+    result = send_email_alert(sample_incident, force=True)
+    return result
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)

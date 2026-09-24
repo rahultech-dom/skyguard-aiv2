@@ -314,7 +314,7 @@ class StateStore:
                 }
         return self.anomaly_details.get("AN-10231")
 
-    def ingest_reading(self, reading: Dict[str, Any]) -> Dict[str, Any]:
+    def ingest_reading(self, reading: Dict[str, Any], force_alert: bool = False) -> Dict[str, Any]:
         """
         Ingests a live weather sensor observation:
         1. Appends reading to sliding window and history buffer.
@@ -374,14 +374,15 @@ class StateStore:
 
         detail_contract = None
 
-        # 3. If Anomaly, trigger LangGraph Pipeline
+        # 3. If Anomaly, trigger LangGraph Pipeline & Alert Dispatch
         if is_anomaly:
             incident_id = f"AN-{uuid.uuid4().hex[:5].upper()}"
             detail_contract = process_flagged_reading(
                 reading=clean_reading,
                 ml_output=ml_result,
                 history_readings=history,
-                incident_id=incident_id
+                incident_id=incident_id,
+                force_alert=force_alert
             )
 
             # Preserve in details cache
@@ -463,7 +464,7 @@ class StateStore:
                 "timestamp": now_ts
             }
 
-        return self.ingest_reading(reading)
+        return self.ingest_reading(reading, force_alert=True)
 
 # Global singleton store instance
 STORE = StateStore()

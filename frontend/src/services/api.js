@@ -164,3 +164,33 @@ export async function toggleChaos(enable = null) {
     return { chaos_enabled: false };
   }
 }
+
+// ── Alert Dispatch Status & Test ─────────────────────────────────────────────
+
+export async function getAlertStatus() {
+  try {
+    return await fetchWithTimeout(`${API_BASE}/api/alerts/status`, {}, 3000);
+  } catch (err) {
+    console.debug("Alert status unreachable:", err.message);
+    return {
+      configured: false,
+      mode: "simulation",
+      sender_email: "Not configured",
+      recipient_email: "Not configured",
+    };
+  }
+}
+
+export async function testAlertDispatch(payload = {}) {
+  try {
+    return await fetchWithTimeout(`${API_BASE}/api/alerts/test`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }, 8000);
+  } catch (err) {
+    console.debug("Alert test dispatch failed:", err.message);
+    return { status: "error", error: err.message };
+  }
+}
+

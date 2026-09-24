@@ -473,26 +473,45 @@ def alert_dispatch_node(state: PipelineAgentState) -> Dict[str, Any]:
     if not final_output:
         return {"alert_dispatched": False, "alert_status": "no_incident_data"}
 
-    severity = final_output.get("severity", "normal")
+    severity = str(final_output.get("severity", "normal")).lower()
     if severity not in ("critical", "warning"):
         return {"alert_dispatched": False, "alert_status": "severity_nominal"}
 
     # Resilient import of alert service
-    try:
-        from src.api.alert_service import send_email_alert
-    except ImportError:
+    send_email_fn = None
+    for mod_path in (
+        "src.api.alert_service",
+        "api.alert_service",
+        "..api.alert_service",
+        "alert_service",
+    ):
         try:
-            from api.alert_service import send_email_alert
+            mod = __import__(mod_path, fromlist=["send_email_alert"])
+            send_email_fn = getattr(mod, "send_email_alert", None)
+            if send_email_fn:
+                break
         except ImportError:
-            try:
-                from ..api.alert_service import send_email_alert
-            except ImportError:
-                from alert_service import send_email_alert
+            continue
+
+    if not send_email_fn:
+        print("[SkyGuard Alert] Alert service could not be loaded. Skipping email dispatch.")
+        final_output["alertDispatched"] = False
+        final_output["alertStatus"] = "service_unavailable"
+        return {
+            "alert_dispatched": False,
+            "alert_status": "service_unavailable",
+            "final_output": final_output
+        }
 
     force_alert = bool(state.get("force_alert", False))
-    result = send_email_alert(final_output, force=force_alert)
-    dispatched = result.get("status") in ("delivered", "simulated_success")
-    status_str = result.get("status", "unknown")
+    try:
+        result = send_email_fn(final_output, force=force_alert)
+        dispatched = result.get("status") in ("delivered", "simulated_success")
+        status_str = result.get("status", "unknown")
+    except Exception as err:
+        print(f"[SkyGuard Alert] SMTP/Alert error during dispatch: {err}")
+        dispatched = False
+        status_str = f"error: {err}"
 
     # Update the final_output contract with alert metadata
     final_output["alertDispatched"] = dispatched

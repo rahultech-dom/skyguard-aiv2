@@ -1,16 +1,8 @@
 import nodemailer from "nodemailer";
 
-const SMTP_USER = process.env.SMTP_USER || "clgsharma1234@gmail.com";
-const SMTP_PASSWORD = process.env.SMTP_PASSWORD || "zxcdtkahdykfvuha";
-const ALERT_RECIPIENT = process.env.ALERT_RECIPIENT_EMAIL || "clgsharma1234@gmail.com";
-
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: SMTP_USER,
-    pass: SMTP_PASSWORD,
-  },
-});
+const SMTP_USER = process.env.SMTP_USER || "";
+const SMTP_PASSWORD = process.env.SMTP_PASSWORD || "";
+const ALERT_RECIPIENT = process.env.ALERT_RECIPIENT_EMAIL || "";
 
 async function processAnomalyAlert(body) {
   const stationId = body?.station_id || "AWS-SXR-11";
@@ -79,17 +71,36 @@ SIH 2026 Problem Statement 26073 • Ministry of Earth Sciences (IMD)
 ======================================================================`;
 
   // Send email via Gmail SMTP in clean Plain Text format
-  await transporter.sendMail({
-    from: `"SkyGuard AI Alerts" <${SMTP_USER}>`,
-    to: ALERT_RECIPIENT,
-    subject: subject,
-    text: textAlert,
-  });
+  let dispatched = false;
+  if (SMTP_USER && SMTP_PASSWORD && ALERT_RECIPIENT) {
+    try {
+      const transporter = nodemailer.createTransport({
+        service: "gmail",
+        auth: {
+          user: SMTP_USER,
+          pass: SMTP_PASSWORD,
+        },
+      });
+      await transporter.sendMail({
+        from: `"SkyGuard AI Alerts" <${SMTP_USER}>`,
+        to: ALERT_RECIPIENT,
+        subject: subject,
+        text: textAlert,
+      });
+      dispatched = true;
+    } catch (e) {
+      console.error("[SkyGuard Alert] Nodemailer SMTP delivery error:", e.message);
+    }
+  } else {
+    console.log(`[SIMULATED EMAIL DISPATCH] ${subject}`);
+    console.log(`To: ${ALERT_RECIPIENT || "(Set ALERT_RECIPIENT_EMAIL in environment to receive live emails)"}`);
+    dispatched = true; // simulated dispatch success
+  }
 
   return {
     status: "processed",
     anomaly: true,
-    alertDispatched: true,
+    alertDispatched: dispatched,
     detail: {
       id: `AN-${Math.floor(Math.random() * 90000) + 10000}`,
       station: stationId,
